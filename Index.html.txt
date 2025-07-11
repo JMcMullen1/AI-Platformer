@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI True/False Platformer</title>
+  <style>
+    body { margin: 0; overflow: hidden; font-family: sans-serif; }
+    canvas { display: block; margin: 0 auto; background: url('https://i.imgur.com/jfB9FEf.png') center center / cover no-repeat; }
+  </style>
+</head>
+<body>
+<canvas id="gameCanvas" width="800" height="600"></canvas>
+<script>
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+
+const spriteImg = new Image();
+spriteImg.src = "https://i.imgur.com/FSuODAe.png";
+const jumpImg = new Image();
+jumpImg.src = "https://i.imgur.com/aXLQcoc.png";
+const celebrateImg = new Image();
+celebrateImg.src = "https://i.imgur.com/7AYoZHI.png";
+const fallingImg = new Image();
+fallingImg.src = "https://i.imgur.com/pRp9los.png";
+const platformImg = new Image();
+platformImg.src = "https://i.imgur.com/nChZGTG.png";
+const brokenPlatformImg = new Image();
+brokenPlatformImg.src = "https://i.imgur.com/9Jkf699.png";
+
+const platforms = {
+  start: { x: 250, y: 200, w: 120, h: 20, label: "", intact: true, breakFrames: 0 },
+  left: { x: 110, y: 320, w: 120, h: 20, label: "True", intact: true, breakFrames: 0 },
+  right: { x: 390, y: 320, w: 120, h: 20, label: "False", intact: true, breakFrames: 0 }
+};
+
+const player = {
+  x: 280,
+  y: platforms.start.y - 55,
+  w: 60,
+  h: 60,
+  jumping: false,
+  falling: false,
+  jumpTarget: null,
+};
+
+let questions = [
+  { q: "AI stands for Artificial Intelligence.", a: true },
+  { q: "AI was invented in 2010.", a: false },
+  { q: "AI can write text, make images and analyse data.", a: true },
+  { q: "All AI is conscious and sentient.", a: false },
+  { q: "Machine Learning is a subset of AI.", a: true },
+  { q: "AI models need training data to learn.", a: true },
+  { q: "AI can think like a human without limitations.", a: false },
+  { q: "AI is used in project management tools.", a: true },
+  { q: "ChatGPT is an example of a generative AI model.", a: true },
+  { q: "AI always gives 100% accurate answers.", a: false },
+];
+
+let currentQuestion = 0;
+let message = "";
+let celebrating = false;
+let showScoreboard = false;
+
+function drawPlayer() {
+  if (celebrating && celebrateImg.complete) {
+    ctx.drawImage(celebrateImg, player.x, player.y, player.w, player.h);
+  } else if (player.falling && fallingImg.complete) {
+    ctx.drawImage(fallingImg, player.x, player.y, player.w, player.h);
+  } else if (player.jumping && jumpImg.complete) {
+    ctx.drawImage(jumpImg, player.x, player.y, player.w, player.h);
+  } else if (spriteImg.complete) {
+    ctx.drawImage(spriteImg, player.x, player.y, player.w, player.h);
+  } else {
+    ctx.fillStyle = "blue";
+    ctx.fillRect(player.x, player.y, player.w, player.h);
+  }
+}
+
+function drawPlatforms() {
+  for (let key in platforms) {
+    const p = platforms[key];
+    ctx.save();
+    if (p.breakFrames > 0) {
+      ctx.translate(p.x + p.w / 2, p.y + p.h / 2);
+      ctx.rotate((Math.random() - 0.5) * 0.1);
+      ctx.translate(-p.w / 2, -p.h / 2);
+    } else {
+      ctx.translate(p.x, p.y);
+    }
+    if (key === "left" || key === "right" || key === "start") {
+      const imgToDraw = p.intact ? platformImg : brokenPlatformImg;
+      ctx.drawImage(imgToDraw, 0, 0, p.w, p.h);
+    }
+    if (key !== "start") {
+      ctx.fillStyle = "white";
+      ctx.font = "20px Arial";
+      ctx.fillText(p.label, 35, -10);
+    }
+    ctx.restore();
+  }
+}
+
+function drawQuestion() {
+  ctx.font = "20px Arial";
+  const text = questions[currentQuestion].q;
+  const maxWidth = canvas.width - 40;
+  const words = text.split(" ");
+  let lines = [];
+  let currentLine = words[0];
+  for (let i = 1; i < words.length; i++) {
+    const width = ctx.measureText(currentLine + " " + words[i]).width;
+    if (width < maxWidth) {
+      currentLine += " " + words[i];
+    } else {
+      lines.push(currentLine);
+      currentLine = words[i];
+    }
+  }
+  lines.push(currentLine);
+
+  const textY = 40;
+  const lineHeight = 26;
+  const boxHeight = lineHeight * lines.length + 10;
+  const boxWidth = Math.max(...lines.map(line => ctx.measureText(line).width)) + 20;
+  const boxX = (canvas.width - boxWidth) / 2 - 80;
+
+  ctx.fillStyle = "white";
+  ctx.fillRect(boxX, textY - 20, boxWidth, boxHeight);
+  ctx.fillStyle = "black";
+
+  for (let i = 0; i < lines.length; i++) {
+    ctx.fillText(lines[i], boxX + 10, textY + i * lineHeight);
+  }
+}
+
+function drawMessage() {
+  if (message) {
+    ctx.fillStyle = "black";
+    ctx.font = "32px Arial";
+    const msgWidth = ctx.measureText(message).width;
+    const msgX = (canvas.width - msgWidth) / 2 - 80;
+    const msgY = platforms.start.y - 30;
+    ctx.fillText(message, msgX, msgY);
+  }
+}
+
+function render() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  if (showScoreboard) {
+    drawScoreboard();
+    return;
+  }
+  drawQuestion();
+  drawPlatforms();
+  drawPlayer();
+  drawMessage();
+}
+
+function animatePlatformBreak(key) {
+  const platform = platforms[key];
+  platform.breakFrames = 15;
+  function breakAnim() {
+    if (platform.breakFrames > 0) {
+      platform.breakFrames--;
+      render();
+      requestAnimationFrame(breakAnim);
+    }
+  }
+  breakAnim();
+}
+
+function jumpToPlatform(target) {
+  player.jumping = true;
+  player.jumpTarget = target;
+  player.jumpStep = 0;
+  animateJump();
+}
+
+function animateJump() {
+  if (!player.jumping) return;
+  let dest = platforms[player.jumpTarget];
+  let dx = (player.jumpTarget === 'left'
+    ? (platforms.left.x - 10 - player.x)
+    : (platforms.right.x + platforms.right.w - player.w + 10 - player.x));
+  let dy = ((dest.y) - (player.y + player.h) + 65);
+
+  player.x += dx / 10;
+  player.y += dy / 10;
+  player.jumpStep++;
+
+  render();
+
+  if (player.jumpStep >= 10) {
+    player.jumping = false;
+    checkAnswer(player.jumpTarget);
+  } else {
+    requestAnimationFrame(animateJump);
+  }
+}
+
+function checkAnswer(selected) {
+  let correct = questions[currentQuestion].a;
+  let choseTrue = selected === "left";
+
+  if (correct === choseTrue) {
+    message = "Correct!";
+    celebrating = true;
+    render();
+    setTimeout(() => {
+      currentQuestion++;
+      celebrating = false;
+      if (currentQuestion >= questions.length) {
+        showScoreboard = true;
+        render();
+        return;
+      } else {
+        resetForNext();
+      }
+    }, 2000);
+  } else {
+    message = "Wrong! Restarting...";
+    platforms[selected].intact = false;
+    animatePlatformBreak(selected);
+    fallOffScreen();
+    setTimeout(() => {
+      player.falling = false;
+      showScoreboard = true;
+      render();
+    }, 1800);
+  }
+}
+
+function fallOffScreen() {
+  player.falling = true;
+  function fall() {
+    if (player.y < canvas.height) {
+      player.y += 4;
+      render();
+      requestAnimationFrame(fall);
+    }
+  }
+  fall();
+}
+
+function resetForNext() {
+  player.x = 280;
+  player.y = platforms.start.y - 55;
+  platforms.left.intact = true;
+  platforms.right.intact = true;
+  platforms.left.breakFrames = 0;
+  platforms.right.breakFrames = 0;
+  message = "";
+  render();
+}
+
+function drawScoreboard() {
+  ctx.fillStyle = 'rgba(255,255,255,0.9)';
+  ctx.fillRect(10, 100, 600, 400);
+  ctx.fillStyle = 'black';
+  ctx.font = '30px Arial';
+  ctx.fillText('Scoreboard', 220, 160);
+  ctx.font = '24px Arial';
+  ctx.fillText('Questions answered correctly: ' + currentQuestion, 150, 220);
+  ctx.fillText('Click anywhere to try again', 150, 280);
+}
+
+function resetGame() {
+  currentQuestion = 0;
+  player.x = 280;
+  player.y = platforms.start.y - 55;
+  platforms.left.intact = true;
+  platforms.right.intact = true;
+  platforms.left.breakFrames = 0;
+  platforms.right.breakFrames = 0;
+  message = "";
+  render();
+}
+
+canvas.addEventListener("click", function (e) {
+  if (showScoreboard) {
+    showScoreboard = false;
+    resetGame();
+    return;
+  }
+  if (player.jumping || message) return;
+  const rect = canvas.getBoundingClientRect();
+  const mouseX = e.clientX - rect.left;
+  const mouseY = e.clientY - rect.top;
+
+  for (let key in platforms) {
+    if (key === "start") continue;
+    let p = platforms[key];
+    if (
+      mouseX >= p.x &&
+      mouseX <= p.x + p.w &&
+      mouseY >= p.y &&
+      mouseY <= p.y + p.h
+    ) {
+      jumpToPlatform(key);
+    }
+  }
+});
+
+spriteImg.onload = render;
+</script>
+</body>
+</html>
