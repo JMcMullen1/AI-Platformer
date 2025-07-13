@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI True/False Platformer</title>
+  <style>
+    body { margin: 0; overflow: hidden; font-family: sans-serif; }
+    canvas { display: block; margin: 0 auto; background: url('https://i.imgur.com/jfB9FEf.png') center center / cover no-repeat; }
+  </style>
+</head>
+<body>
+<canvas id="gameCanvas" width="800" height="600"></canvas>
+<script>
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+
+// --- Image Assets ---
+const spriteImg = new Image(); spriteImg.src = "https://i.imgur.com/FSuODAe.png";
+const jumpImg = new Image();   jumpImg.src   = "https://i.imgur.com/aXLQcoc.png";
+const celebrateImg = new Image(); celebrateImg.src = "https://i.imgur.com/7AYoZHI.png";
+const fallingImg   = new Image(); fallingImg.src   = "https://i.imgur.com/pRp9los.png";
+const platformImg  = new Image(); platformImg.src  = "https://i.imgur.com/nChZGTG.png";
+const brokenPlatformImg = new Image(); brokenPlatformImg.src = "https://i.imgur.com/9Jkf699.png";
+
+// --- Wait for all images before starting ---
+let imagesLoaded = 0;
+const totalImages = 6;
+function checkAllImagesLoaded() {
+  imagesLoaded++;
+  if (imagesLoaded === totalImages) {
+    // Start only after DOM & images are ready
+    window.onload = () => loop();
+  }
+}
+[spriteImg, jumpImg, celebrateImg, fallingImg, platformImg, brokenPlatformImg].forEach(img => img.onload = checkAllImagesLoaded);
+
+// --- Game Data ---
+const platforms = {
+  start: { x: 340, y: 200, w: 120, h: 20, label: "",       intact: true },
+  left:  { x: 200, y: 320, w: 120, h: 20, label: "True",  intact: true },
+  right: { x: 480, y: 320, w: 120, h: 20, label: "False", intact: true }
+};
+
+const player = {
+  w: 60, h: 60,
+  x: platforms.start.x + (platforms.start.w - 60) / 2,
+  y: platforms.start.y - 55,
+  jumping:false,
+  falling:false,
+  jumpTarget:null
+};
+
+const questions = [
+  { text: "AI can learn from data without being explicitly programmed.", answer: true },
+  { text: "Generative AI can only produce text.",                    answer: false },
+  { text: "AI is used in voice assistants like Siri.",               answer: true },
+  { text: "AI cannot be used for creating art or music.",           answer: false },
+  { text: "ChatGPT is an example of generative AI.",                answer: true },
+  { text: "AI models don't require training data.",                 answer: false },
+  { text: "AI can help with medical diagnosis.",                    answer: true },
+  { text: "Generative AI understands context like a human.",        answer: false },
+  { text: "AI is used in recommendation systems.",                  answer: true },
+  { text: "Generative AI was invented in the 1800s.",               answer: false }
+];
+
+let currentQuestion = 0;
+let message = "";
+let showCelebration = false;
+let celebrationTimer = 0; // 90 frames ≈ 1.5 s
+let scoreScreen = false;
+let shouldFallAfterJump = false;
+let gameOver = false;
+let celebrationComplete = false;
+
+// --- Input ---
+canvas.addEventListener("click", e => {
+  if (scoreScreen) { resetGame(); gameOver=false; scoreScreen=false; return; }
+  if (player.jumping || player.falling || showCelebration) return;
+
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+
+  // Enlarged click zone
+  if (y > platforms.left.y - 40 && y < platforms.left.y + platforms.left.h + 60) {
+    if (x > platforms.left.x - 40 && x < platforms.left.x + platforms.left.w + 40) handleAnswer(true);
+    else if (x > platforms.right.x - 40 && x < platforms.right.x + platforms.right.w + 40) handleAnswer(false);
+  }
+});
+
+// --- Game Logic Functions ---
+function handleAnswer(choice){
+  if(!questions[currentQuestion])return;
+  const correct = questions[currentQuestion].answer===choice;
+  const target  = choice?platforms.left:platforms.right;
+  player.jumping=true;
+  player.jumpTarget={x:target.x+(target.w-player.w)/2, y:target.y-player.h+5};
+  setTimeout(()=>{
+    if(correct){ showCelebration=true; celebrationTimer=90; }
+    else { target.intact=false; shouldFallAfterJump=true; }
+  },500);
+  message = correct?"Correct!":"Wrong!";
+}
+
+function resetPlayer(){
+  player.x = platforms.start.x + (platforms.start.w - player.w)/2;
+  player.y = platforms.start.y - 55;
+  player.jumping=false; player.falling=false; player.jumpTarget=null;
+  showCelebration=false; message=""; celebrationComplete=false;
+  platforms.left.intact= platforms.right.intact=true;
+}
+function resetGame(){ currentQuestion=0; resetPlayer(); }
+
+// --- Drawing Helpers ---
+function drawPlatform(p){
+  ctx.drawImage(p.intact?platformImg:brokenPlatformImg,p.x,p.y,p.w,p.h);
+  if(p.label){ ctx.font="16px sans-serif"; ctx.fillStyle="#fff"; ctx.textAlign="center"; ctx.fillText(p.label,p.x+p.w/2,p.y-10);} }
+function drawPlayer(){
+  const img = player.falling?fallingImg : showCelebration?celebrateImg : player.jumping?jumpImg : spriteImg;
+  ctx.drawImage(img,player.x,player.y,player.w,player.h);
+}
+function drawQuestion(){
+  if(!questions[currentQuestion])return;
+  const q=questions[currentQuestion].text;
+  ctx.font="20px sans-serif"; ctx.textAlign="center";
+  const boxW=ctx.measureText(q).width+20; ctx.fillStyle="#fff";
+  ctx.fillRect((canvas.width-boxW)/2,60,boxW,30);
+  ctx.fillStyle="#000"; ctx.fillText(q,canvas.width/2,80);
+}
+function drawMessage(){ if(message){ ctx.font="18px sans-serif"; ctx.fillStyle="yellow"; ctx.textAlign="center"; ctx.fillText(message,400,160);} }
+function drawScore(){
+  if(scoreScreen){
+    ctx.fillStyle="rgba(0,0,0,0.7)"; ctx.fillRect(0,0,canvas.width,canvas.height);
+    ctx.fillStyle="#fff"; ctx.textAlign="center"; ctx.font="28px sans-serif";
+    ctx.fillText(gameOver?"Game Over!":"You answered all questions!",canvas.width/2,250);
+    ctx.fillText(`Score: ${currentQuestion}/10`,canvas.width/2,285);
+    ctx.font="20px sans-serif"; ctx.fillText("Click anywhere to restart",canvas.width/2,320);
+  }
+}
+
+// --- Update Loop ---
+function update(){
+  if(player.jumping && player.jumpTarget){
+    const dx=player.jumpTarget.x-player.x, dy=player.jumpTarget.y-player.y;
+    player.x+=dx*0.1; player.y+=dy*0.1;
+    if(Math.abs(dx)<1 && Math.abs(dy)<1){
+      player.jumping=false; player.jumpTarget=null;
+      if(shouldFallAfterJump){ player.falling=true; shouldFallAfterJump=false; }
+    }
+  }
+  if(player.falling){ player.y+=2; if(player.y>canvas.height){ player.falling=false; gameOver=true; scoreScreen=true; } }
+  if(showCelebration && celebrationTimer>0) celebrationTimer--; else if(showCelebration && celebrationTimer===0 && !celebrationComplete){
+    celebrationComplete=true;
+    setTimeout(()=>{
+      showCelebration=false; currentQuestion++;
+      if(currentQuestion>=questions.length) scoreScreen=true; else resetPlayer();
+    },1500);
+  }
+}
+
+// --- Main Draw ---
+function draw(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  drawPlatform(platforms.start); drawPlatform(platforms.left); drawPlatform(platforms.right);
+  drawPlayer(); drawQuestion(); drawMessage(); drawScore();
+}
+
+// --- Game Loop ---
+function loop(){ update(); draw(); requestAnimationFrame(loop); }
+</script>
+</body>
+</html>
+
